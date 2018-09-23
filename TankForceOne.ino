@@ -156,41 +156,44 @@ const unsigned char start[] PROGMEM = {
   0x00, 0xff, 0xff, 0xff, 0x00, 0x00, 0x00, 0xff, 0xff, 0xff, 0x00, 0x00, 0x00, 0xff, 0xff, 0xff,
 };
 
-byte screen = 1;
-byte landY[17];
-byte rightY = 64;
-int tankX[] = {-8, 8, 8, -8, -8};
-int tankY[] = {-4, -4, 4, 4, -4};
-int eTankX[] = {-4, 4, 4, -4, -4};
-int eTankY[] = {-4, -4, 4, 4, -4};
-int rot = 0;
-byte tx = 0;
-float ty = 0;
-int wRot = 90;
-float bulletX = 0;
-float bulletY = 0;
-boolean bulletState = false;
-int bulletDir = 0;
-float xspd = 3;
-float yspd = 2;
-float gravity = 0.2;
-float resistance = 0.05;
-byte enemyX = 0;
-byte enemyY = 0;
-boolean enemyState = false;
-int enemyRot = 0;
-byte last = 0;
-unsigned int points = 0;
-byte mortarX = 200;
-boolean mortarState = true;
-int timer = 0;
+byte screen = 1;                      //controls which screen gets rendered
+byte landY[17];                       //array that saves the current terrain
+byte rightY = 64;                     //the first y coordinate of the terrain
+int tankX[] = {-8, 8, 8, -8, -8};     //array that saves the x coordinates of the tank vector
+int tankY[] = {-4, -4, 4, 4, -4};     //array that saves the y coordinate of the tank vector
+int eTankX[] = {-4, 4, 4, -4, -4};    //array that saves the x coordinates of the enemy vector
+int eTankY[] = {-4, -4, 4, 4, -4};    //array that saves the y coordiantes of the enemy vector
+int rot = 0;                          //saves the current tank rotation
+byte tx = 0;                          //saves the current tank x coordinate
+float ty = 0;                         //saves the current tank y coordiante
+int wRot = 90;                        //saves the current gun rotation
+float bulletX = 0;                    //bullet x coordiante
+float bulletY = 0;                    //bullet y coordiante
+boolean bulletState = false;          //whether the bullet currently exists or not
+int bulletDir = 0;                    //direction the bullet is travelling
+float xspd = 3;                       //horizontal speed of the bullet
+float yspd = 2;                       //vertical speed of the bullet
+float gravity = 0.2;                  //strength of gravity that affects the bullet
+float resistance = 0.05;              //strength of air resistance that affects the bullet
+byte enemyX = 0;                      //x cordiante of the enemy
+byte enemyY = 0;                      //y cordiante of the enemy
+boolean enemyState = false;           //whether or not the enemy is alive curently
+int enemyRot = 0;                     //crrent enemy rotation
+byte last = 0;                        //the amount of points you got from the last kill
+unsigned int points = 0;              //the amount of points the player has
+byte mortarX = 200;                   //x coordinate of the mortar. starts at 200 to not be visible first cycle
+boolean mortarState = true;           //whether the mortar is curretly warning or damaging
+int timer = 0;                        //timer that controls how long the mortar warns and goes of for
+boolean controlSheme = true;          //which control sheme the player has chosen to use (true left/right for gun)
 
 void setup() {
   arduboy.begin();
   arduboy.setFrameRate(30);
   arduboy.initRandomSeed();
   arduboy.clear();
+  //generates the terrain for the first level
   initLand();
+  //spawns the enemy for the first level
   spawnEnemy();
 }
 
@@ -200,7 +203,8 @@ void loop() {
   }
   arduboy.pollButtons();
   arduboy.clear();
-  
+
+  //game screen
   if (screen == 0) {
     toggleSound();
     setEnemyRot();
@@ -209,8 +213,13 @@ void loop() {
     setTankRot();
     setTankY();
     moveBullet();
-    moveTank();
-    moveGun();
+    if (controlSheme) {
+      moveTank();
+      moveGun();
+    } else {
+      moveTank2();
+      moveGun2();
+    }
     shoot();
     drawLand();
     destroyBulletTerrainCollision();
@@ -224,12 +233,23 @@ void loop() {
     drawBullet();
     drawUI();
   }
+  //start screen
   if (screen == 1) {
     arduboy.drawBitmap(0, 0, start, 128, 64, WHITE);
     if (arduboy.justPressed(A_BUTTON)) {
       screen = 0;
     }
+    if (arduboy.justPressed(B_BUTTON)) {
+      controlSheme = !controlSheme;
+    }
+    tinyfont.setCursor(0, 60);
+    if (controlSheme) {
+      tinyfont.print("A");
+    } else {
+      tinyfont.print("B");
+    }
   }
+  //game over screen
   if (screen == 2) {
     arduboy.drawBitmap(0, 0, gameOver, 128, 64, WHITE);
     tinyfont.setCursor(60, 18);
@@ -243,6 +263,7 @@ void loop() {
   arduboy.display();
 }
 
+//draws the exploded mortar and starts the timer to switc to the warning state
 void mortarExplode() {
   if (mortarState) {
     sound.tone(70, 66);
@@ -256,6 +277,7 @@ void mortarExplode() {
   }
 }
 
+//draws the mortar warning and starts the timer to switch to the exploded state
 void drawMortarZone() {
   if (!mortarState) {
     if (arduboy.everyXFrames(2)) {
@@ -274,6 +296,7 @@ void drawMortarZone() {
   }
 }
 
+//draws points
 void drawUI() {
   arduboy.fillRect(0, 0, 128, 5, BLACK);
   tinyfont.setCursor(0, 0);
@@ -284,6 +307,7 @@ void drawUI() {
   tinyfont.print(points);
 }
 
+//destroys the bullet if a white pixel is above the bullet (only takes the pixels into account that have been drawn by this point)
 void destroyBulletTerrainCollision() {
   if (bulletState) {
     for (int y = 0; y < bulletY; y++) {
@@ -301,6 +325,7 @@ void destroyBulletTerrainCollision() {
   }
 }
 
+//destroys enemy and bullet if they collide
 void killEnemy() {
   if (bulletState and enemyState) {
     Rect rectEnemy{enemyX - 5, enemyY - 5, 10, 10};
@@ -315,6 +340,7 @@ void killEnemy() {
   }
 }
 
+//destroys the bullet if it leaves the screen to the sides of bottom
 void destroyBulletOutOfBounds() {
   if (bulletState) {
     if (bulletX > 128 or bulletX < 0) {
@@ -326,12 +352,14 @@ void destroyBulletOutOfBounds() {
   }
 }
 
+//calculates the rotation the enemy needs to have based on the slant of the terrain below
 void setEnemyRot() {
   if (enemyState) {
     enemyRot = getAngle(enemyX - (enemyX % 8), landY[enemyX/8], (enemyX + 8) - (enemyX % 8), landY[(enemyX/8)+1]);
   }
 }
 
+//spawns an enemy and calculates the y coordinate based on the terrain
 void spawnEnemy() {
   if (!enemyState) {
     enemyState = true;
@@ -354,6 +382,7 @@ void spawnEnemy() {
   }
 }
 
+//moves the bullet in the coresponding dirction
 void moveBullet() {
   if (bulletState) {
     bulletX = bulletX + lendirX(xspd, bulletDir);
@@ -394,6 +423,7 @@ void drawGun() {
   arduboy.drawLine(tx, ty, tx + lendirX(10, rot + wRot), ty + lendirY(10, rot + wRot), WHITE);
 }
 
+//calculates the tank y coordinate based ont the terrain below
 void setTankY() {
   byte x1 = tx - (tx % 8);
   byte y1 = landY[tx/8];
@@ -410,10 +440,12 @@ void setTankY() {
   ty = ((m * ftx) + b)-3;
 }
 
+//calculates the tank rotation based on the terrain below
 void setTankRot() {
   rot = getAngle(tx - (tx % 8), landY[tx/8], (tx + 8) - (tx % 8), landY[(tx/8)+1]);
 }
 
+//moves the tank and generates a new level when the screen is left to the right
 void moveTank() {
   if (arduboy.pressed(UP_BUTTON)) {
     tx++;
@@ -439,6 +471,33 @@ void moveTank() {
   }
 }
 
+//same as moveTank but uses other control sheme
+void moveTank2() {
+  if (arduboy.pressed(RIGHT_BUTTON)) {
+    tx++;
+  }
+  if (arduboy.pressed(LEFT_BUTTON)) {
+    tx--;
+  }
+  if (tx < 8) {
+    tx = 8;
+  }
+  if (tx > 127) {
+    tx = 0;
+    initLand();
+    bulletState = false;
+    enemyState = false;
+    spawnEnemy();
+    mortarX = 200;
+    mortarState = false;
+    timer = arduboy.frameCount;
+  }
+  if (enemyX - tx < 10 and enemyState) {
+    tx--;
+  }
+}
+
+//generates the terrain
 void initLand() {
   byte lastY = rightY;
   for (int i = 0; i < 17; i++) {
@@ -454,6 +513,7 @@ void initLand() {
   rightY = landY[16];
 }
 
+//rotates the gun
 void moveGun() {
   if (arduboy.pressed(RIGHT_BUTTON)) {
     wRot -= 1;
@@ -469,19 +529,29 @@ void moveGun() {
   }
 }
 
+//same as moveGun but with ither control sheme
+void moveGun2() {
+  if (arduboy.pressed(UP_BUTTON)) {
+    wRot += 1;
+  }
+  if (arduboy.pressed(DOWN_BUTTON)) {
+    wRot -= 1;
+  }
+  if (wRot > 90) {
+    wRot = 90;
+  }
+  if (wRot < 1) {
+    wRot = 1;
+  }
+}
+
 void drawLand() {
   for (int i = 0; i < 16; i++) {
     arduboy.drawLine(8 * i, landY[i], 8 * (i+1), landY[i+1], WHITE);
   }
 }
 
-void incRot() {
-  rot++;
-  if (rot >= 360) {
-    rot = 0;
-  }
-}
-
+//calculates the x coordinate of a point based on the direction and distance of that point (relative to 0,0)
 float lendirX(int len, int dir) {
   dir = ((dir % 360) + 360) % 360;
   dir = dir - 360;
@@ -509,6 +579,7 @@ float lendirX(int len, int dir) {
   }
 }
 
+//calculates the y coordinate of a point based on the direction and distance of that point (relative to 0,0)
 float lendirY(int len, int dir) {
   dir = ((dir % 360) + 360) % 360;
   dir = dir - 360;
@@ -536,6 +607,7 @@ float lendirY(int len, int dir) {
   }
 }
 
+//draws a vector with x array, y array, x coordiante, y coordiante, number of elemtns in array, xscale, yscale, roation
 void drawVectorRot(int xc, int yc, int x[], int y[],byte len, int xscale, int yscale, int rot) {
   for (int i = 0; i <= len-2; i++) {
     int leni = getDistance(0, 0, x[i], y[i]);
@@ -548,6 +620,7 @@ void drawVectorRot(int xc, int yc, int x[], int y[],byte len, int xscale, int ys
   }
 }
 
+//gets the distance between 2 points
 byte getDistance(int x1, int y1, int x2, int y2) {
   int dx = max(x1, x2) - min(x1, x2);
   int dy = max(y1, y2) - min(y1, y2);
@@ -555,12 +628,14 @@ byte getDistance(int x1, int y1, int x2, int y2) {
   return sqrt(sq(dx) + sq(dy));
 }
 
+//gets the angle between 2 points relative to horizontal
 int getAngle(int x1, int y1, int x2, int y2) {
   int angle = (atan2(y1 - y2, x1 - x2) * 180 / 3.14159265359f);
   angle = (((-(angle + 180)) % 360)+ 360)% 360;
   return angle;
 }
 
+//toggles the sound between on and off and saves the current state
 void toggleSound() {
   if (arduboy.justPressed(B_BUTTON)) {
     arduboy.audio.toggle();
